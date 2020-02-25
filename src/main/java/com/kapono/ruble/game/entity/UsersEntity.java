@@ -19,7 +19,7 @@ public class UsersEntity extends BaseEntity {
     private Long id;
 
     @Column(name = "user_id")
-    private Long userId;
+    private Integer userId;
 
     @ManyToOne
     @JoinColumn(name = "game_id")

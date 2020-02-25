@@ -1,30 +1,26 @@
 package com.kapono.ruble.game.bot;
 
-import com.kapono.ruble.game.bot.command.handler.CommandFactory;
-import com.kapono.ruble.game.bot.command.handler.Handler;
-import com.kapono.ruble.game.entity.GameEntity;
-import com.kapono.ruble.game.entity.UsersEntity;
-import com.kapono.ruble.game.repository.GameRepository;
-import com.kapono.ruble.game.repository.UsersRepository;
+import com.kapono.ruble.game.bot.command.handler.CommandService;
+import com.kapono.ruble.game.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
 public class RubleGameBot extends TelegramLongPollingBot {
 
-    private final UsersRepository usersRepository;
-    private final GameRepository gameRepository;
+    private final UserService userService;
+    private final CommandService commandService;
 
     @Value("${bot.token}")
     private String token;
@@ -50,18 +46,44 @@ public class RubleGameBot extends TelegramLongPollingBot {
                 .map(Message::getText)
                 .map(String::trim)
                 .filter(Strings::isNotEmpty)
-                .map(curText -> CommandFactory.getCommandHandler(update, curText))
-                .map(Handler::response)
+                .map(curText -> commandService.getResponse(update, curText))
                 .ifPresent(this::sendMessage);
+        if (update.hasCallbackQuery()) {
+            String data = update.getCallbackQuery().getData();
+            Long chatId = update.getCallbackQuery().getMessage().getChatId();
+            Integer messageId = update.getCallbackQuery().getMessage().getMessageId();
+            if ("pay_ok".equals(data)) {
+                Integer userId = update.getCallbackQuery().getFrom().getId();
+                userService.addNewUser(userId);
+                String answer = "Вы учавствуете!";
+                EditMessageText new_message = new EditMessageText()
+                        .setChatId(chatId)
+                        .setMessageId(messageId)
+                        .setText(answer);
+                sendEditMessage(new_message);
+            }
+            if ("pay_no".equals(data)) {
+                String answer = "Вы не учавствуете!";
+                EditMessageText new_message = new EditMessageText()
+                        .setChatId(chatId)
+                        .setMessageId(messageId)
+                        .setText(answer);
+                sendEditMessage(new_message);
+            }
+        }
+    }
+
+    private void sendEditMessage(EditMessageText new_message) {
+        try {
+            execute(new_message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
     }
 
     private void sendMessage(SendMessage message) {
         try {
-            GameEntity game = gameRepository.findById(1L).orElse(null);
-            UsersEntity users = new UsersEntity();
-            users.setUserId(1L);
-            users.setGame(game);
-            usersRepository.save(users);
             execute(message);
         } catch (TelegramApiException e) {
             e.printStackTrace();
